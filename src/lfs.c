@@ -13,6 +13,7 @@ int lfs_readdir ( const char *, void *, fuse_fill_dir_t, off_t, struct fuse_file
 int lfs_open    ( const char *, struct fuse_file_info * );
 int lfs_read    ( const char *, char *, size_t, off_t, struct fuse_file_info * );
 int lfs_release ( const char *path, struct fuse_file_info *fi);
+int lfs_mkdir 	( const char * name);
 
 // Defines operations for file operations to Fuse
 static struct fuse_operations lfs_oper = {
