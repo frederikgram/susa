@@ -37,12 +37,41 @@ static struct fuse_operations lfs_oper = {
 
 int lfs_write(const char * path, const char * buffer, size_t size, off_t offset, struct fuse_file_info * fi) {
     printf("Trying to write to file at: '%s'\n", path);
+
+
     return 0;
 
 }
 
-int lfs_mkdir(const char * name, mode_t mode) {
-    printf("%s\n",name);
+int lfs_mkdir(const char * path, mode_t mode) {
+    printf("Trying to create a directory with path: '%s'\n", path);
+    
+    char * nonconst_path = strdup(path);
+    
+    // Extract the name of the folder to be created from the absolute path
+    char * name = strrchr(nonconst_path, '/') + 1;
+    if (name == NULL) {
+        printf("mkdir: name was null\n");
+        return -1;
+    }
+
+    // Extract the parents path from the absolute path
+    char * parent_path = (char *) malloc (strlen(nonconst_path) - strlen(name) + 4);
+    strcpy(parent_path, "root");
+    strncat(parent_path, nonconst_path, (strlen(nonconst_path) - strlen(name) - 1));
+
+    printf("mkdir folder name: %s\n", name);
+    printf("mkdir parent name: %s\n", parent_path);
+
+    // Find the parent lfs_directory instance 
+    struct lfs_directory * parent = find_directory(root_directory, parent_path);
+    if (parent == NULL) {
+        printf("could not find parent directory in mkdir\n");
+        return -1;    
+    } 
+        
+    initialize_directory(parent, name);
+
     return 0;
 }
 
@@ -64,15 +93,23 @@ int lfs_getattr( const char *path, struct stat *stbuf ) {
     strcpy(abs_path, "root");
     strcat(abs_path, path);
     
+    
+
+    
     void * found_struct = find_file_or_directory(abs_path);    
     if (found_struct == NULL) {
+        printf("Getattr did not find struct for path:'%s'\n", abs_path);
         return -ENOENT;
     }    
 
     // Found a directory
     if (((struct lfs_directory * )found_struct)->mode == 16877) {
+        struct lfs_directory * dir = ((struct lfs_directory * )found_struct);
         stbuf->st_mode = 16877;
+        stbuf->st_atime = dir->last_accessed;
+        stbuf->st_mtime = dir->last_modified;
         stbuf->st_nlink = 2;
+
     } else if (((struct lfs_file * )found_struct)->mode == 33279) {
         struct lfs_file * file = ((struct lfs_file * )found_struct);
 
@@ -83,8 +120,8 @@ int lfs_getattr( const char *path, struct stat *stbuf ) {
         stbuf->st_uid = file->owner_id;
         stbuf->st_gid = file->owner_id;
         stbuf->st_nlink = 1;
-    
     } else {
+        printf("Getattr not working on path:'%s'\n", abs_path);
         return -ENOENT;
     }
 	return res;
@@ -95,9 +132,6 @@ int lfs_readdir( const char *path, void *buf, fuse_fill_dir_t filler, off_t offs
 	(void) fi;
 	printf("readdir: (path=%s)\n", path);
 
-	if(strcmp(path, "/") != 0)
-		return -ENOENT;
-
 	filler(buf, ".", NULL, 0);
 	filler(buf, "..", NULL, 0);
 
@@ -106,6 +140,8 @@ int lfs_readdir( const char *path, void *buf, fuse_fill_dir_t filler, off_t offs
     char * abs_path = (char *) malloc(6 + strlen(path));
     strcpy(abs_path, "root");
     strcat(abs_path, path);
+
+	printf("readdir: (abs path=%s)\n", abs_path);
 
     struct lfs_directory * dir = find_directory(root_directory, abs_path);
     if (dir == NULL) { return -ENOENT; }
@@ -143,41 +179,14 @@ int main( int argc, char *argv[] ) {
 
     /* Setup root directory for our filesystem */
     root_directory = initialize_directory(NULL, "root");
-    struct lfs_directory * home_dir = initialize_directory(root_directory, "home");
-    struct lfs_directory * fgk_dir = initialize_directory(home_dir, "fgk");
-    struct lfs_directory * lassan_dir = initialize_directory(home_dir, "lassan");
+    struct lfs_directory * home_dir      = initialize_directory(root_directory, "home");
+    struct lfs_directory * fgk_dir       = initialize_directory(home_dir, "fgk");
+    struct lfs_directory * lassan_dir    = initialize_directory(home_dir, "lassan");
+    struct lfs_directory * videos_dir    = initialize_directory(fgk_dir, "videos");
     struct lfs_directory * downloads_dir = initialize_directory(fgk_dir, "downloads");
-    struct lfs_directory * videos_dir = initialize_directory(fgk_dir, "videos");
+    struct lfs_directory * pornstash_dir = initialize_directory(downloads_dir, "pornstash");
 
-   /* 
-    printf("===Test initialization of a nested file===\n");
-    char * tmp_buffer = "lolololo";
-    struct lfs_file * new_file = initialize_file(videos_dir, "myfile.elf", tmp_buffer, strlen(tmp_buffer) + 1, NULL);
-    printf("> filename: %s\n", new_file->name);
-    printf("> filedata: %s\n", new_file->data);
-    printf("> parent name: %s\n", new_file->parent_dir->name);
-    printf("> own name from parent: %s\n", videos_dir->files[0]->name);
 
-    printf("===Test dynamic casting of void pointers with a file ===\n");
-    void * result = find_file_or_directory("root/home/fgk/videos/myfile.elf");
-    printf("> mode cast from file: %d\n", ((struct lfs_file *) result)->mode);
-    printf("> mode cast from dir: %d\n", ((struct lfs_directory *) result)->mode);
-
-    printf("===Test dynamic casting of void pointers with a directory ===\n");
-    result = find_file_or_directory("root/home/fgk/videos/");
-    printf("> mode cast from file: %d\n", ((struct lfs_file *) result)->mode);
-    printf("> mode cast from dir: %d\n", ((struct lfs_directory *) result)->mode);
-
-    printf("===Test dynamic casting of void pointers with a second directory ===\n");
-    result = find_file_or_directory("root/home/lassan");
-    printf("> mode cast from file: %d\n", ((struct lfs_file *) result)->mode);
-    printf("> mode cast from dir: %d\n", ((struct lfs_directory *) result)->mode);
-    // struct file_or_dir
-        // is_dir
-        // void *
-
-    // struct lfs_directory * found_dir = find_directory(root_directory, "/root/home/fgk/videos");
-*/
 	fuse_main( argc, argv, &lfs_oper);
 
 
