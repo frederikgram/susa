@@ -52,8 +52,35 @@ typedef struct lfs_directory {
 
 
 
-struct lfs_file * find_file(struct lfs_directory * parent, char * name) {
+/* Prepends "root" onto any given string */
+char * prepend_root(char * str) {
 
+    char * pstr = (char *) malloc (strlen(str) + 5);
+    strcpy(pstr, "root");
+    strcat(pstr, str);
+    return pstr;
+
+}
+
+/* Fetches the last segment of a given string, that can
+   be separated by using the given delimiter */
+char * extract_last_segment(char * str, char delim) {
+    char * name = strrchr(str, delim) + 1;
+    return name;
+}
+
+/* Extracts all segments but the last, that can
+   be created by using the given delimiter on the given string */
+char * extract_init_segments(char * str, char delim) {
+
+    char * last_segment = extract_last_segment(str, delim)  ;
+    char * init_segments = (char *) malloc (strlen(str) - strlen(last_segment) );
+    strncat(init_segments, str, (strlen(str) - strlen(last_segment) - 1));
+    return init_segments;
+}
+
+
+struct lfs_file * find_file(struct lfs_directory * parent, char * name) {
     for (int i = 0; i < parent->num_files; i++) {
         if (parent->files[i] != NULL && strcmp(parent->files[i]->name, name) == 0) {
             return parent->files[i];
@@ -68,6 +95,7 @@ struct lfs_directory * find_directory(struct lfs_directory * current_dir, char *
     /* If the given path is empty (NULL), we know that
     we're inside the correct directory */
     if (path == NULL || strcmp(path, "") == 0){
+        printf("Returning from find directory with current dir path :%s\n", current_dir->path);
         return current_dir;
     }
 
@@ -82,9 +110,10 @@ struct lfs_directory * find_directory(struct lfs_directory * current_dir, char *
     } else {
         tail = nonconst_path + strlen(segment) + 1;
     }
-    
+   
+
     /* Handle Absolute paths wrt. /root/ */
-    if (strcmp(segment, current_dir->name) == 0) {
+    if (strcmp(segment, "root") == 0) {
         return find_directory(current_dir, tail);
     }
 
@@ -116,7 +145,6 @@ void * find_file_or_directory(char * path) {
     char * segment = strtok(strdup(nonconst_path), "/");
     char * tail = nonconst_path + strlen(segment) + 1;
 
-//     /home/fgk/test/test
     while (true) {
         current_dir = find_directory(current_dir, segment);
 

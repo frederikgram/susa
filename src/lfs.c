@@ -37,9 +37,23 @@ static struct fuse_operations lfs_oper = {
 
 int lfs_write(const char * path, const char * buffer, size_t size, off_t offset, struct fuse_file_info * fi) {
     printf("Trying to write to file at: '%s'\n", path);
+    char * nonconst_path = strdup(path);
+    
+    /* Extract the name of the folder to be created from the absolute path */
+    char * name = extract_last_segment(nonconst_path, '/');
+    if (name == NULL) {
+        printf("mkdir: name was null\n");
+        return -1;
+    }
+
+    /* Extract the parents path and prepend the root path to it */
+    char * test = extract_init_segments(nonconst_path, '/');
+    char * parent_segments = extract_init_segments(nonconst_path, '/');
+    char * parent_path = prepend_root(parent_segments);
 
 
     return 0;
+
 
 }
 
@@ -48,20 +62,17 @@ int lfs_mkdir(const char * path, mode_t mode) {
     
     char * nonconst_path = strdup(path);
     
-    // Extract the name of the folder to be created from the absolute path
-    char * name = strrchr(nonconst_path, '/') + 1;
+    /* Extract the name of the folder to be created from the absolute path */
+    char * name = extract_last_segment(nonconst_path, '/');
     if (name == NULL) {
         printf("mkdir: name was null\n");
         return -1;
     }
 
-    // Extract the parents path from the absolute path
-    char * parent_path = (char *) malloc (strlen(nonconst_path) - strlen(name) + 4);
-    strcpy(parent_path, "root");
-    strncat(parent_path, nonconst_path, (strlen(nonconst_path) - strlen(name) - 1));
-
-    printf("mkdir folder name: %s\n", name);
-    printf("mkdir parent name: %s\n", parent_path);
+    /* Extract the parents path and prepend the root path to it */
+    char * test = extract_init_segments(nonconst_path, '/');
+    char * parent_segments = extract_init_segments(nonconst_path, '/');
+    char * parent_path = prepend_root(parent_segments);
 
     // Find the parent lfs_directory instance 
     struct lfs_directory * parent = find_directory(root_directory, parent_path);
@@ -82,20 +93,29 @@ int lfs_getattr( const char *path, struct stat *stbuf ) {
     printf("getattr: (path=%s)\n", path);
 
 	memset(stbuf, 0, sizeof(struct stat));
-	if( strcmp( path, "/" ) == 0 ) {
+    
+	if( strcmp( path, "/" ) == 0) {
 		stbuf->st_mode  = S_IFDIR | 0755;
 		stbuf->st_nlink = 2;
         return res;
 	}
-    
+
     char * nonconst_path = strdup(path);
     char * abs_path = (char *) malloc(6 + strlen(path));
     strcpy(abs_path, "root");
     strcat(abs_path, path);
-    
+    printf("getattr: (abs path=%s)\n", abs_path);
     
 
-    
+    /* Instead of using this function, we could've simply
+    extracted the parent path (the first n-1) segments of the given path,
+    and found the directory thereto, and hereafter looked in that directories
+    array of both files and directories, to find the structure we're looking for.
+
+    However, we've opted to go for this approach, as wanted to utilize
+    void pointer casting, to learn a little more about possible usecases.
+    as this is for all intents and purposes, a learning experience. */
+
     void * found_struct = find_file_or_directory(abs_path);    
     if (found_struct == NULL) {
         printf("Getattr did not find struct for path:'%s'\n", abs_path);
@@ -124,7 +144,9 @@ int lfs_getattr( const char *path, struct stat *stbuf ) {
         printf("Getattr not working on path:'%s'\n", abs_path);
         return -ENOENT;
     }
-	return res;
+
+    return res;
+
 }
 
 int lfs_readdir( const char *path, void *buf, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info *fi ) {
