@@ -11,16 +11,13 @@ typedef struct lfs_directory  lfs_directory;
 struct lfs_directory * root_directory;
 
 
-/* Structure defining in-memory definition of a file */
 typedef struct lfs_file {
 
     mode_t mode;
     struct lfs_directory * parent_dir;
     char * name;
     char * data;
-    bool read_only;
-    struct fuse_file_info * fi;
-    uid_t owner_id;
+
     unsigned int size;
     unsigned int created_at;
     unsigned int last_accessed;
@@ -28,20 +25,18 @@ typedef struct lfs_file {
     
 } lfs_file;
 
-/* Structure defining in-memory defition of a directory */
 typedef struct lfs_directory {
 
     mode_t mode;
     struct lfs_directory * parent_dir;
     char * name;
-    char * path;
     
     /* Pointers to child files and directories
     residing inside this directory */
     struct lfs_file * files[STD_DIRECTORY_FILES_SIZE];
-    int num_files;
-
     struct lfs_directory * directories[STD_DIRECTORY_TABLE_SIZE];
+
+    int num_files;
     int num_directories;
 
     unsigned int created_at;
@@ -90,12 +85,16 @@ struct lfs_file * find_file(struct lfs_directory * parent, char * name) {
     return NULL;
 }
 
+/* Recursively attempts to find a directory at the 
+given path, taking basis in the given directory.
+
+If no directory was found, return NULL. */
 struct lfs_directory * find_directory(struct lfs_directory * current_dir, char * path) {
     
     /* If the given path is empty (NULL), we know that
     we're inside the correct directory */
     if (path == NULL || strcmp(path, "") == 0){
-        printf("Returning from find directory with current dir path :%s\n", current_dir->path);
+        printf("Returning from find_directory with current dir name :%s\n", current_dir->name);
         return current_dir;
     }
 
@@ -135,13 +134,17 @@ a void pointer, which can then be re-cast
 
 This function works iteratively, in contrast
 to find_directory - for showcase purposes */
-void * find_file_or_directory(char * path) {
+void * find_file_or_directory(char * path, bool return_last) {
     
 
     struct lfs_directory * last_dir = root_directory; 
     struct lfs_directory * current_dir = root_directory;
     
+
+    
     char * nonconst_path = strdup(path);
+
+    char * name = extract_last_segment(nonconst_path, '/');
     char * segment = strtok(strdup(nonconst_path), "/");
     char * tail = nonconst_path + strlen(segment) + 1;
 
@@ -152,8 +155,12 @@ void * find_file_or_directory(char * path) {
             struct lfs_file * file = find_file(last_dir, segment);
             if (file != NULL) {
                 return (void *) file;
-            } else {
+
+            // @TODO : Do we ever want to return last_dir?
+            } else if (return_last ){
                 return (void *) last_dir;
+            } else {
+                return NULL;
             }
         }
 
@@ -170,23 +177,27 @@ void * find_file_or_directory(char * path) {
 }
 
 /* Shorthands for setting up a file or directories */
-struct lfs_file * initialize_file(struct lfs_directory * parent, char * name, char * buffer,
-                    size_t size, struct fuse_file_info * fi) {
+struct lfs_file * initialize_file(struct lfs_directory * parent, char * name, char * buffer, size_t size, bool make_buffer) {
 
 
     printf("Initializing file with name: '%s'\n", name);
     struct lfs_file * file = malloc(sizeof(struct lfs_file));
+
     file->parent_dir = parent;
     file->name = name;
+
+    file->data = (char *) malloc(size);
+
+    if (make_buffer) {
+        char * buffer = (char *) malloc(0);
+    }
     memcpy(&file->data, &buffer, size);
+
     file->size = size;
     file->mode = S_IFREG | 0777;
-    file->fi = fi;
-    
     file->created_at    = (unsigned long)time(NULL);
     file->last_accessed  = file->created_at; 
     file->last_modified = file->created_at;
-
 
     parent->files[parent->num_files] = file; 
     parent->num_files++;
@@ -201,24 +212,11 @@ struct lfs_directory * initialize_directory(struct lfs_directory * parent, char 
 
     dir->parent_dir = parent;
 
-    if (parent == NULL) {
-        dir->path = (char *) malloc(5);
-        strcpy(dir->path, "root");
-    } else {
-        
-        dir->path = (char * ) malloc(
-            strlen(parent->path) + strlen(name) + 2
-        );
-
-        strcpy(dir->path, parent->path);
-        strcat(dir->path, "/");
-        strcat(dir->path, name);
-        
+    if (parent != NULL) {
         parent->directories[parent->num_directories] = dir;
         parent->num_directories++; 
-
     }
-    printf("Initialized directory with path: '%s'\n", dir->path);
+    printf("Initialized directory with name: '%s'\n", name);
 
     dir->created_at    = (unsigned long)time(NULL);
     dir->last_accessed  = dir->created_at; 
