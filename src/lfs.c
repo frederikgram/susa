@@ -206,7 +206,6 @@ int main( int argc, char *argv[] ) {
     struct lfs_directory * lassan_dir    = initialize_directory(home_dir, "lassan");
     struct lfs_directory * videos_dir    = initialize_directory(fgk_dir, "videos");
     struct lfs_directory * downloads_dir = initialize_directory(fgk_dir, "downloads");
-    struct lfs_directory * pornstash_dir = initialize_directory(downloads_dir, "pornstash");
 
 
 	fuse_main( argc, argv, &lfs_oper);

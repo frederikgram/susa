@@ -149,12 +149,15 @@ void * find_file_or_directory(char * path) {
         current_dir = find_directory(current_dir, segment);
 
         if (current_dir == NULL) {
-            return (void *) find_file(last_dir, segment);
-        } else {
-            last_dir = current_dir;
+            struct lfs_file * file = find_file(last_dir, segment);
+            if (file != NULL) {
+                return (void *) file;
+            } else {
+                return (void *) last_dir;
+            }
         }
 
-    
+        last_dir = current_dir;
         segment = strtok(tail, "/");
         if (segment == NULL) {
             break;
