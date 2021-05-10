@@ -37,20 +37,17 @@ static struct fuse_operations lfs_oper = {
 
 int lfs_write(const char * path, const char * buffer, size_t size, off_t offset, struct fuse_file_info * fi) {
     printf("Trying to write to file at: '%s'\n", path);
-    char * nonconst_path = strdup(path);
-    
-    /* Extract the name of the folder to be created from the absolute path */
-    char * name = extract_last_segment(nonconst_path, '/');
-    if (name == NULL) {
-        printf("write: name was null\n");
-        return -1;
+
+    struct lfs_file * file = (struct lfs_file *) fi->fh;
+
+    if (offset >= file->size + size) {
+        return 0;
     }
-
-    /* Extract the parents path and prepend the root path to it */
-    char * parent_segments = extract_init_segments(nonconst_path, '/');
-    char * parent_path = prepend_root(parent_segments);
-
-    return 0;
+    
+    file->data = realloc(file->data, file->size + size);
+    memcpy(file->data + offset, buffer, size);
+    file->size = file-size + size;
+    return size;
 }
 
 int lfs_mkdir(const char * path, mode_t mode) {
@@ -182,14 +179,14 @@ int lfs_open( const char *path, struct fuse_file_info *fi ) {
     char * abs_path = prepend_root(nonconst_path);
     void * found_struct = find_file_or_directory(abs_path, false);    
 
-    /* The file we're trying to open does not exist */
+    /* The file we're trying to open does not exist. */
     if (found_struct == NULL || ((struct lfs_file *)found_struct)->mode != 33279) {
         printf("file not found\n");
         return -ENOENT;
     } 
 
     struct lfs_file * file = (struct lfs_file *) found_struct;
-    printf("%s\n", ((struct lfs_directory*)file)->name);
+    fi->fh = (uint64_t) file;
 
 	return 0;
 }
@@ -197,8 +194,20 @@ int lfs_open( const char *path, struct fuse_file_info *fi ) {
 int lfs_read( const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *fi ) {
     printf("read: (path=%s)\n", path);
      
-	memcpy( buf, "Hello\n", 6 );
-	return 6;
+
+    struct lfs_file * file = (struct lfs_file *) fi->fh;
+
+    if (offset >= file->size + size) {
+        return 0;
+    }
+
+
+    int bytes_to_read = file->size < size ? file->size : size;
+
+    memcpy(buf, file->data + offset, bytes_to_read);
+    printf("read %ld bytes from file '%s' representing the string '%s'\n", bytes_to_read, path, buf);
+    return bytes_to_read;
+      
 }
 
 int lfs_release(const char *path, struct fuse_file_info *fi) {
@@ -215,8 +224,6 @@ int main( int argc, char *argv[] ) {
     struct lfs_directory * lassan_dir    = initialize_directory(home_dir, "lassan");
     struct lfs_directory * videos_dir    = initialize_directory(fgk_dir, "videos");
     struct lfs_directory * downloads_dir = initialize_directory(fgk_dir, "downloads");
-
-    struct lfs_file * test_file          = initialize_file(root_directory, "test.txt", NULL, 0, true);
 
 
 	fuse_main( argc, argv, &lfs_oper);

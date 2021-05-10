@@ -157,7 +157,7 @@ void * find_file_or_directory(char * path, bool return_last) {
                 return (void *) file;
 
             // @TODO : Do we ever want to return last_dir?
-            } else if (return_last ){
+            } else if (return_last || strcmp(last_dir->name, name) == 0){
                 return (void *) last_dir;
             } else {
                 return NULL;
