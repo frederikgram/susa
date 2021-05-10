@@ -85,6 +85,53 @@ struct lfs_file * find_file(struct lfs_directory * parent, char * name) {
     return NULL;
 }
 
+
+
+/* Recursively remove directories and all
+files therein in a depth-first manner */
+int remove_directory(struct lfs_directory * dir) {
+
+    bool shift_left = false;
+    for (int i = 0; i < dir->parent_dir->num_directories; i++) {
+        if (strcmp(dir->parent_dir->directories[i]->name, dir->name) == 0) {
+            dir->parent_dir->directories[i] = NULL;
+            shift_left = true;
+        } else {
+
+            if (shift_left) {
+                dir->parent_dir->directories[i-1] = dir->parent_dir->directories[i];
+                dir->parent_dir->directories[i] = NULL;
+            }
+        }
+    }
+
+    dir->parent_dir->num_directories -= 1;
+    
+    for (int i = 0; i < dir->num_directories; i++) {
+        remove_directory(dir->directories[i]);
+    }
+
+    for (int i = 0; i < dir->num_files; i++) {
+        free(dir->files[i]->data);
+        free(dir->files[i]);
+    }
+    
+    free(dir);
+    return 0;
+
+}
+
+/* Remove a directory if it has no child elements */
+int remove_directory_if_empty(struct lfs_directory * dir) {
+    if (dir->num_files == 0 && dir->num_directories == 0) {
+        remove_directory(dir);
+    } else {
+        return -ENOTEMPTY;
+    }
+
+    return 0;
+    
+}
 /* Recursively attempts to find a directory at the 
 given path, taking basis in the given directory.
 
@@ -110,7 +157,6 @@ struct lfs_directory * find_directory(struct lfs_directory * current_dir, char *
         tail = nonconst_path + strlen(segment) + 1;
     }
    
-
     /* Handle Absolute paths wrt. /root/ */
     if (strcmp(segment, "root") == 0) {
         return find_directory(current_dir, tail);
@@ -133,14 +179,17 @@ from the given path, and return it as
 a void pointer, which can then be re-cast
 
 This function works iteratively, in contrast
-to find_directory - for showcase purposes */
-void * find_file_or_directory(char * path, bool return_last) {
+to find_directory - for showcase purposes 
+
+See lfs.c - lfs_getattr for the reason behind
+this overly complex void pointer stuff
+*/
+
+void * find_file_or_directory(char * path) {
     
 
     struct lfs_directory * last_dir = root_directory; 
     struct lfs_directory * current_dir = root_directory;
-    
-
     
     char * nonconst_path = strdup(path);
 
@@ -155,9 +204,7 @@ void * find_file_or_directory(char * path, bool return_last) {
             struct lfs_file * file = find_file(last_dir, segment);
             if (file != NULL) {
                 return (void *) file;
-
-            // @TODO : Do we ever want to return last_dir?
-            } else if (return_last || strcmp(last_dir->name, name) == 0){
+            } else if (strcmp(last_dir->name, name) == 0){
                 return (void *) last_dir;
             } else {
                 return NULL;
@@ -187,7 +234,6 @@ struct lfs_file * initialize_file(struct lfs_directory * parent, char * name, ch
     file->name = name;
 
     file->data = (char *) malloc(size);
-
     if (make_buffer) {
         char * buffer = (char *) malloc(0);
     }
