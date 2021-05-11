@@ -8,15 +8,19 @@
 
 
 // Definitions for file system operations 
-int lfs_getattr ( const char *, struct stat * );
-int lfs_readdir ( const char *, void *, fuse_fill_dir_t, off_t, struct fuse_file_info * );
-int lfs_open    ( const char *, struct fuse_file_info * );
-int lfs_read    ( const char *, char *, size_t, off_t, struct fuse_file_info * );
-int lfs_release ( const char *path, struct fuse_file_info *fi);
-int lfs_mkdir   ( const char *, mode_t);
-int lfs_write   ( const char *, const char *, size_t, off_t, struct fuse_file_info *);
-int lfs_rmdir   ( const char *);
-int lfs_mknod   ( const char *, mode_t, dev_t);
+int lfs_getattr  ( const char *, struct stat * );
+int lfs_readdir  ( const char *, void *, fuse_fill_dir_t, off_t, struct fuse_file_info * );
+int lfs_open     ( const char *, struct fuse_file_info * );
+int lfs_read     ( const char *, char *, size_t, off_t, struct fuse_file_info * );
+int lfs_release  ( const char *path, struct fuse_file_info *fi);
+int lfs_mkdir    ( const char *, mode_t);
+int lfs_write    ( const char *, const char *, size_t, off_t, struct fuse_file_info *);
+int lfs_rmdir    ( const char *);
+int lfs_mknod    ( const char *, mode_t, dev_t);
+int lfs_truncate ( const char *, off_t);
+int lfs_utime    (const char * , const struct timespec ts[2]);
+int lfs_unlink   (const char *);
+int lfs_create   (const char *, mode_t, struct fuse_file_info*);
 
 // Defines operations for file operations to Fuse
 static struct fuse_operations lfs_oper = {
@@ -24,16 +28,118 @@ static struct fuse_operations lfs_oper = {
 	.readdir	= lfs_readdir,
 	.mknod      = lfs_mknod,
 	.mkdir      = lfs_mkdir,
-	.unlink     = NULL,
 	.rmdir      = lfs_rmdir,
-	.truncate   = NULL,
+    .unlink     = lfs_unlink,
+	.truncate   = lfs_truncate,
 	.open	    = lfs_open,
 	.read	    = lfs_read,
 	.release    = lfs_release,
 	.write      = lfs_write,
-	.rename     = NULL,
-	.utime      = NULL
+	.utime      = lfs_utime,
 };
+
+
+
+int lfs_unlink(const char * path) {
+    char * nonconst_path = strdup(path);
+    printf("trying unlink\n");
+    
+    /* Extract the name of the file to be created from the absolute path */
+    char * name = extract_last_segment(nonconst_path, '/');
+    if (name == NULL) {
+        return -1;
+    }
+
+    /* Extract the parents path and prepend the root path to it */
+    char * parent_segments = extract_init_segments(nonconst_path, '/');
+    char * parent_path = prepend_root(parent_segments);
+
+    // Find the parent lfs_directory instance 
+    struct lfs_directory * parent = find_directory(root_directory, parent_path);
+    if (parent == NULL) {
+        printf("could not find parent directory in mknod\n");
+        return -1;    
+    } 
+    
+    struct lfs_file* file = find_file(parent, name);
+    if (file == NULL) {
+        return -ENOENT;
+    }        
+
+    remove_file(file);
+    
+    return 0;
+}
+
+int lfs_utime(const char * path, const struct timespec ts[2]) {
+    char * nonconst_path = strdup(path);
+    printf("trying utime\n");
+    
+    /* Extract the name of the file to be created from the absolute path */
+    char * name = extract_last_segment(nonconst_path, '/');
+    if (name == NULL) {
+        return -1;
+    }
+
+    /* Extract the parents path and prepend the root path to it */
+    char * parent_segments = extract_init_segments(nonconst_path, '/');
+    char * parent_path = prepend_root(parent_segments);
+
+    // Find the parent lfs_directory instance 
+    struct lfs_directory * parent = find_directory(root_directory, parent_path);
+    if (parent == NULL) {
+        printf("could not find parent directory in utime\n");
+        return -1;    
+    } 
+    
+    struct lfs_file* file = find_file(parent, name);
+    if (file == NULL) {
+        return -ENOENT;
+    }        
+
+    file->last_accessed = ts[0].tv_sec;
+    file->last_modified = ts[1].tv_sec;
+
+    return 0;
+    
+}
+
+int lfs_truncate(const char * path, off_t size) {
+    char * nonconst_path = strdup(path);
+    
+    /* Extract the name of the file to be created from the absolute path */
+    char * name = extract_last_segment(nonconst_path, '/');
+    if (name == NULL) {
+        printf("mkdir: name was null\n");
+        return -1;
+    }
+
+    /* Extract the parents path and prepend the root path to it */
+    char * parent_segments = extract_init_segments(nonconst_path, '/');
+    char * parent_path = prepend_root(parent_segments);
+
+    // Find the parent lfs_directory instance 
+    struct lfs_directory * parent = find_directory(root_directory, parent_path);
+    if (parent == NULL) {
+        printf("could not find parent directory in mknod\n");
+        return -1;    
+    } 
+    
+    struct lfs_file* file = find_file(parent, name);
+    if (file == NULL) {
+        return -ENOENT;
+    }        
+
+     
+    file->data = realloc(file->data, size);
+    file->size = size;
+    file->last_modified = file->last_accessed;
+
+    return 0;
+
+
+}
+
 
 int lfs_mknod(const char * path, mode_t mode, dev_t rdev) {
 
@@ -57,8 +163,14 @@ int lfs_mknod(const char * path, mode_t mode, dev_t rdev) {
         return -1;    
     } 
         
+    printf(">>>>>>>>> initializing file in mknod called: '%s'\n", name);
     initialize_file(parent, name, NULL, 0, true);
     return 0;
+}
+
+int lfs_create(const char * path, mode_t mode, struct fuse_file_info * fi) {
+    printf("CEREATE fjdsklsg \n");
+    return lfs_mknod(path, mode, 0);
 }
 
 int lfs_rmdir(const char * path) {
@@ -77,6 +189,10 @@ int lfs_write(const char * path, const char * buffer, size_t size, off_t offset,
     printf("Trying to write to %ld bytes representing '%s' to file at: '%s'\n", size, buffer, path);
 
     struct lfs_file * file = (struct lfs_file *) fi->fh;
+    if (file == NULL) {
+        return -ENOENT;
+    }
+    printf("........................... %s\n", file->name);
 
     if (offset >= file->size + size) {
         return 0;

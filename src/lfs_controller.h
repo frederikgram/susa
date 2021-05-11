@@ -87,8 +87,32 @@ struct lfs_file * find_file(struct lfs_directory * parent, char * name) {
 
 
 
+int remove_file(struct lfs_file * file) {
+    bool shift_left = false;
+    for (int i = 0; i < file->parent_dir->num_files; i++) {
+        if (strcmp(file->parent_dir->files[i]->name, file->name) == 0) {
+            file->parent_dir->files[i] = NULL;
+            shift_left = true;
+        } else {
+
+            // @TODO  Once we hit a null again, we should break
+            if (shift_left) {
+                file->parent_dir->files[i-1] = file->parent_dir->files[i];
+                file->parent_dir->files[i] = NULL;
+            }
+        }
+    }
+
+    file->parent_dir->num_files -= 1;
+    
+    free(file->data);
+    free(file);
+    return 0;
+
+}
+
 /* Recursively remove directories and all
-files therein in a depth-first manner */
+files therein using depth-first traversal */
 int remove_directory(struct lfs_directory * dir) {
 
     bool shift_left = false;
@@ -98,6 +122,7 @@ int remove_directory(struct lfs_directory * dir) {
             shift_left = true;
         } else {
 
+            // @TODO  Once we hit a null again, we should break
             if (shift_left) {
                 dir->parent_dir->directories[i-1] = dir->parent_dir->directories[i];
                 dir->parent_dir->directories[i] = NULL;
@@ -132,6 +157,8 @@ int remove_directory_if_empty(struct lfs_directory * dir) {
     return 0;
     
 }
+
+
 /* Recursively attempts to find a directory at the 
 given path, taking basis in the given directory.
 
