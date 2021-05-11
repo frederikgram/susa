@@ -239,19 +239,16 @@ void * find_file_or_directory(char * path) {
     struct lfs_directory * last_dir = root_directory; 
     struct lfs_directory * current_dir = root_directory;
     
-    char * nonconst_path = strdup(path);
 
-    char * name = extract_last_segment(nonconst_path, '/');
-    char * segment = strtok(strdup(nonconst_path), "/");
-    char * tail = nonconst_path + strlen(segment) + 1;
+    char * name = extract_last_segment(path, '/');
+    char * segment = strtok(strdup(path), "/");
+    char * tail = path + strlen(segment) + 1;
 
     /* While true is bad, use it anyways */
     while (true) {
 
         /* Attempt to find a child directory with the current segment as name */
         current_dir = find_directory(current_dir, segment);
-
-        printf("n: %s, s: %s, t: %s\n", name, segment, tail);
 
         if (current_dir == NULL) {
             struct lfs_file * file = find_file(last_dir, segment);
