@@ -1,10 +1,10 @@
-/* .... */
+/* Logic and abstractions for use in lfs.c */
 
 #include <string.h>
 #include <stdbool.h>
 
 #define STD_DIRECTORY_TABLE_SIZE 1024
-#define STD_DIRECTORY_FILES_SIZE 1024
+#define STD_DIRECTORY_FILES_SIZE 4096
 
 typedef struct lfs_file lfs_file;
 typedef struct lfs_directory  lfs_directory;
@@ -19,9 +19,9 @@ typedef struct lfs_file {
     char * data;
 
     unsigned int size;
-    unsigned int created_at;
-    unsigned int last_accessed;
-    unsigned int last_modified;
+    time_t created_at;
+    time_t last_accessed;
+    time_t last_modified;
     
 } lfs_file;
 
@@ -39,9 +39,9 @@ typedef struct lfs_directory {
     int num_files;
     int num_directories;
 
-    unsigned int created_at;
-    unsigned int last_accessed;
-    unsigned int last_modified;
+    time_t created_at;
+    time_t last_accessed;
+    time_t last_modified;
 
 } lfs_directory;
 
@@ -87,6 +87,15 @@ struct lfs_file * find_file(struct lfs_directory * parent, char * name) {
 
 
 
+/* Removes a file from its parent directory
+and free's all the memory allocated in connection
+to the initialization of said file.
+
+Following the deletion, we shift all files in
+the parent directory one to the left, as to
+avoid having any leading NULL's in the parent
+directories array of files.
+*/
 int remove_file(struct lfs_file * file) {
     bool shift_left = false;
     for (int i = 0; i < file->parent_dir->num_files; i++) {
@@ -94,8 +103,6 @@ int remove_file(struct lfs_file * file) {
             file->parent_dir->files[i] = NULL;
             shift_left = true;
         } else {
-
-            // @TODO  Once we hit a null again, we should break
             if (shift_left) {
                 file->parent_dir->files[i-1] = file->parent_dir->files[i];
                 file->parent_dir->files[i] = NULL;
@@ -111,8 +118,19 @@ int remove_file(struct lfs_file * file) {
 
 }
 
-/* Recursively remove directories and all
-files therein using depth-first traversal */
+
+/* Recursively rmove a a directory and all
+files and directories inside of it, and in turn,
+inside their children etc.
+
+Following this, free all the memory allocated in connection
+to the initialization of said directory.
+
+Hereafter  shift all files in
+the parent directory one to the left, as to
+avoid having any leading NULL's in the parent
+directories array of directories.
+*/
 int remove_directory(struct lfs_directory * dir) {
 
     bool shift_left = false;
@@ -122,7 +140,6 @@ int remove_directory(struct lfs_directory * dir) {
             shift_left = true;
         } else {
 
-            // @TODO  Once we hit a null again, we should break
             if (shift_left) {
                 dir->parent_dir->directories[i-1] = dir->parent_dir->directories[i];
                 dir->parent_dir->directories[i] = NULL;
@@ -146,7 +163,8 @@ int remove_directory(struct lfs_directory * dir) {
 
 }
 
-/* Remove a directory if it has no child elements */
+/* Removes a directory using remove_directory
+if and only if the directory is empty. */
 int remove_directory_if_empty(struct lfs_directory * dir) {
     if (dir->num_files == 0 && dir->num_directories == 0) {
         remove_directory(dir);
@@ -161,14 +179,17 @@ int remove_directory_if_empty(struct lfs_directory * dir) {
 
 /* Recursively attempts to find a directory at the 
 given path, taking basis in the given directory.
-
 If no directory was found, return NULL. */
 struct lfs_directory * find_directory(struct lfs_directory * current_dir, char * path) {
     
     /* If the given path is empty (NULL), we know that
     we're inside the correct directory */
     if (path == NULL || strcmp(path, "") == 0){
-        printf("Returning from find_directory with current dir name :%s\n", current_dir->name);
+        
+        #ifdef DEBUG
+            printf("find_directory: Returning from find_directory with current dir name :%s\n", current_dir->name);
+        #endif
+
         return current_dir;
     }
 
@@ -224,13 +245,22 @@ void * find_file_or_directory(char * path) {
     char * segment = strtok(strdup(nonconst_path), "/");
     char * tail = nonconst_path + strlen(segment) + 1;
 
+    /* While true is bad, use it anyways */
     while (true) {
+
+        /* Attempt to find a child directory with the current segment as name */
         current_dir = find_directory(current_dir, segment);
+
+        printf("n: %s, s: %s, t: %s\n", name, segment, tail);
 
         if (current_dir == NULL) {
             struct lfs_file * file = find_file(last_dir, segment);
+
+            /* If we found a file at the current path,
+            but not a folder, return the file */
             if (file != NULL) {
                 return (void *) file;
+
             } else if (strcmp(last_dir->name, name) == 0){
                 return (void *) last_dir;
             } else {
@@ -250,11 +280,14 @@ void * find_file_or_directory(char * path) {
     return (void*) last_dir;
 }
 
-/* Shorthands for setting up a file or directories */
+/* Shorthand for setting up a file */
 struct lfs_file * initialize_file(struct lfs_directory * parent, char * name) {
 
 
-    printf("Initializing file with name: '%s'\n", name);
+    #ifdef DEBUG
+        printf("Initializing file with name: '%s'\n", name);
+    #endif
+
     struct lfs_file * file = malloc(sizeof(struct lfs_file));
 
     file->parent_dir = parent;
@@ -262,8 +295,8 @@ struct lfs_file * initialize_file(struct lfs_directory * parent, char * name) {
     file->data = (char *) malloc(0);
     file->size = 0;
     file->mode = S_IFREG | 0777;
-    file->created_at    = (unsigned long)time(NULL);
-    file->last_accessed  = file->created_at; 
+    file->created_at    = time(NULL);
+    file->last_accessed = file->created_at; 
     file->last_modified = file->created_at;
 
     parent->files[parent->num_files] = file; 
@@ -273,6 +306,7 @@ struct lfs_file * initialize_file(struct lfs_directory * parent, char * name) {
 
 }
 
+/* Shorthand for setting up a directory */
 struct lfs_directory * initialize_directory(struct lfs_directory * parent, char * name) {
     struct lfs_directory * dir;
     dir = malloc(sizeof(struct lfs_directory));
@@ -283,10 +317,13 @@ struct lfs_directory * initialize_directory(struct lfs_directory * parent, char 
         parent->directories[parent->num_directories] = dir;
         parent->num_directories++; 
     }
-    printf("Initialized directory with name: '%s'\n", name);
 
-    dir->created_at    = (unsigned long)time(NULL);
-    dir->last_accessed  = dir->created_at; 
+    #ifdef DEBUG
+        printf("Initialized directory with name: '%s'\n", name);
+    #endif
+
+    dir->created_at    = time(NULL);
+    dir->last_accessed = dir->created_at; 
     dir->last_modified = dir->created_at;
 
     dir->mode = S_IFDIR | 0755;

@@ -86,7 +86,7 @@ int lfs_utime(const char * path, const struct timespec ts[2]) {
 
     #ifdef DEBUG
         printf("utime: Trying to modify the access and modification times of the entry at path '%s' \
-               to the values: %d, %d respectively\n", path, ts[0].tv_sec, ts[1].tv_sec);
+               to the values: %ld, %ld respectively\n", path, ts[0].tv_sec, ts[1].tv_sec);
     #endif
 
     /* Extract the parents path and prepend the root path to it */
@@ -157,7 +157,7 @@ int lfs_mknod(const char * path, mode_t mode, dev_t rdev) {
     char * name = extract_last_segment(nonconst_path, '/');
     if (name == NULL) {
         fprintf(stderr, "mkdir: Could not extract name from the given path '%s'\n", path);
-        return -EINVAL;
+        return -1;
     }
 
     /* Extract the parents path and prepend the root path to it */
@@ -194,7 +194,7 @@ int lfs_rmdir(const char * path) {
 int lfs_write(const char * path, const char * buffer, size_t size, off_t offset, struct fuse_file_info * fi) {
 
     #ifdef DEBUG
-        printf("write: Trying to write to %ld bytes representing '%s' to file at: '%s'\n", size, buffer, path);
+        printf("write: Trying to write to %ld bytes to file at: '%s'\n", size, path);
     #endif
 
     /* Fetch the pointer to the file, inserted into the
@@ -206,18 +206,23 @@ int lfs_write(const char * path, const char * buffer, size_t size, off_t offset,
         return -ENOENT;
     }
 
+/*
     if (offset >= file->size + size) {
         fprintf(stderr, "write: Could not write at offset '%ld' as it would be out of bounds\n", offset);
         return 0;
     }
-   
-    int new_size = size + offset < file->size ? size + offset : file->size + size - offset;
-
+*/
     #ifdef DEBUG
-        printf("write: Resizing file at path '%s' to be '%d' bytes long\n", path, new_size);
+        printf("write: Resizing file at path '%s' to be '%ld' bytes long\n", path, file->size + size + offset);
     #endif
     
-    
+    int new_size;
+    if (offset + size > file->size) {
+        new_size = file->size + abs(offset+size - file->size);
+    } else {
+        new_size = file->size + size - offset;
+    }
+
     file->data = realloc(file->data, new_size);
     memcpy(file->data + offset, buffer, size);
 
@@ -367,7 +372,7 @@ int lfs_open( const char *path, struct fuse_file_info *fi ) {
     } 
 
     struct lfs_file * file = (struct lfs_file *) found_struct;
-    file->last_accessed = (unsigned long)time(NULL);
+    file->last_accessed = time(NULL);
     fi->fh = (uint64_t) file;
 
 	return 0;
@@ -386,7 +391,7 @@ int lfs_read( const char *path, char *buf, size_t size, off_t offset, struct fus
 
     int bytes_to_read = file->size < size ? file->size : size;
     memcpy(buf, file->data + offset, bytes_to_read);
-    printf("read %d bytes from file '%s' representing the string '%s'\n", bytes_to_read, path, buf);
+    printf("read %d bytes from file '%s'\n", bytes_to_read, path);
     return bytes_to_read;
       
 }
