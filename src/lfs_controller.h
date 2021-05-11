@@ -251,7 +251,7 @@ void * find_file_or_directory(char * path) {
 }
 
 /* Shorthands for setting up a file or directories */
-struct lfs_file * initialize_file(struct lfs_directory * parent, char * name, char * buffer, size_t size, bool make_buffer) {
+struct lfs_file * initialize_file(struct lfs_directory * parent, char * name) {
 
 
     printf("Initializing file with name: '%s'\n", name);
@@ -259,14 +259,8 @@ struct lfs_file * initialize_file(struct lfs_directory * parent, char * name, ch
 
     file->parent_dir = parent;
     file->name = name;
-
-    file->data = (char *) malloc(size);
-    if (make_buffer) {
-        char * buffer = (char *) malloc(0);
-    }
-    memcpy(&file->data, &buffer, size);
-
-    file->size = size;
+    file->data = (char *) malloc(0);
+    file->size = 0;
     file->mode = S_IFREG | 0777;
     file->created_at    = (unsigned long)time(NULL);
     file->last_accessed  = file->created_at; 
