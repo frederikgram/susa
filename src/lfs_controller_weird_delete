@@ -10,7 +10,6 @@ typedef struct lfs_file lfs_file;
 typedef struct lfs_directory  lfs_directory;
 struct lfs_directory * root_directory;
 
-
 typedef struct lfs_file {
 
     mode_t mode;
@@ -67,7 +66,6 @@ char * extract_last_segment(char * str, char delim) {
 /* Extracts all segments but the last, that can
    be created by using the given delimiter on the given string */
 char * extract_init_segments(char * str, char delim) {
-
     char * last_segment = extract_last_segment(str, delim)  ;
     char * init_segments = (char *) malloc (strlen(str) - strlen(last_segment) );
     strncat(init_segments, str, (strlen(str) - strlen(last_segment) - 1));
@@ -75,6 +73,7 @@ char * extract_init_segments(char * str, char delim) {
 }
 
 
+/* Iterate through a given directorys array of files and search for a match */
 struct lfs_file * find_file(struct lfs_directory * parent, char * name) {
     for (int i = 0; i < parent->num_files; i++) {
         if (parent->files[i] != NULL && strcmp(parent->files[i]->name, name) == 0) {
@@ -119,7 +118,7 @@ int remove_file(struct lfs_file * file) {
 }
 
 
-/* Recursively rmove a a directory and all
+/* Recursively remove a a directory and all
 files and directories inside of it, and in turn,
 inside their children etc.
 
@@ -207,8 +206,6 @@ struct lfs_directory * find_directory(struct lfs_directory * current_dir, char *
    
     /* Handle Absolute paths wrt. /root/ */
     if (strcmp(segment, "root") == 0) {
-        free(segment);
-        free(nonconst_path);
         return find_directory(current_dir, tail);
     }
 
@@ -216,14 +213,10 @@ struct lfs_directory * find_directory(struct lfs_directory * current_dir, char *
     directories directory table  */
     for (int i = 0; i < current_dir->num_directories; i++) {
         if (strcmp(segment, current_dir->directories[i]->name) == 0) {
-            free(segment);
-            free(nonconst_path);
             return find_directory(current_dir->directories[i], tail);
         }
     }
 
-    free(segment);
-    free(nonconst_path);
     return NULL;  
 }
 
@@ -232,71 +225,47 @@ struct lfs_directory * find_directory(struct lfs_directory * current_dir, char *
 from the given path, and return it as 
 a void pointer, which can then be re-cast
 
-This function works iteratively, in contrast
-to find_directory - for showcase purposes 
-
 See lfs.c - lfs_getattr for the reason behind
 this overly complex void pointer stuff */
 void * find_file_or_directory(char * path) {
 
-    struct lfs_directory * last_dir = root_directory; 
-    struct lfs_directory * current_dir = root_directory;
-    
+    /* Extract the name of the file to be created from the absolute path */
     char * name = extract_last_segment(path, '/');
-    char * segment = strtok(strdup(path), "/");
-    char * tail = path + strlen(segment) + 1;
-
-    /* While true is bad, use it anyways */
-    while (true) {
-
-        #ifdef DEBUG
-            if (tail == NULL) {
-                printf("find_file_or_dir:  name: %s, segment: %s, tail: NULL\n", name, segment);
-            } else {
-                printf("find_file_or_dir:  name: %s, segment: %s, tail: %s\n", name, segment, tail);
-            }
-        #endif
-
-        /* Attempt to find a child directory with the current segment as name */
-        current_dir = find_directory(current_dir, segment);
-
-        if (current_dir == NULL) {
-            struct lfs_file * file = find_file(last_dir, segment);
-
-            /* If we found a file at the current path,
-            but not a folder, return the file */
-            if (file != NULL) {
-                return (void *) file;
-
-            /* If no file was found, return the last
-            seen directory if it matches with name */
-            } else if (strcmp(last_dir->name, name) == 0){
-                return (void *) last_dir;
-
-            /* Nothing could be found at the given path */
-            } else {
-                return NULL;
-            }
-        }
-
-        
-        last_dir = current_dir;
-        segment = strtok(tail, "/");
-        if (segment != NULL) {
-
-            if (strcmp(name, tail) == 0 && strcmp(segment, tail) != 0) {
-                tail = NULL;
-            } else {
-                tail = tail + strlen(segment) + 1;
-            }
-
-        } else {
-            break;
-        }
+    if (name == NULL) { 
+        fprintf(stderr, "find_file_or_directory: Could not extract name from the given path '%s'\n", path);
+        return NULL;
     }
-    
-    return (void*) last_dir;
+
+    /* Extract the parents path */
+    char * parent_segments = extract_init_segments(path, '/');
+
+    // Find the parent lfs_directory instance 
+    printf("SSSSSSSSSSSSSSSSSSSSSS:   %s\n", parent_segments);
+    struct lfs_directory * parent = find_directory(root_directory, parent_segments);
+    if (parent == NULL) {
+        fprintf(stderr, "find_file_or_directory: Could not find parent directory at path: '%s'\n", path);
+        return NULL;
+    }
+
+    struct lfs_directory * dir = find_directory(parent, name);
+
+    /* If no directory at the given path was found, check for files */
+    if (dir == NULL) {
+        struct lfs_file * file = find_file(parent, name);
+
+        /* If no file was found at the given path, return NULL */
+        if (file == NULL) {
+            return NULL;
+
+    /* Otherwise we return a void pointer to the found structure */
+        } else {
+            return (void *) file;
+        }
+    } else {
+        return (void *) dir;
+    }
 }
+
 
 /* Shorthand for setting up a file */
 struct lfs_file * initialize_file(struct lfs_directory * parent, char * name) {

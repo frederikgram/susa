@@ -207,8 +207,6 @@ struct lfs_directory * find_directory(struct lfs_directory * current_dir, char *
    
     /* Handle Absolute paths wrt. /root/ */
     if (strcmp(segment, "root") == 0) {
-        free(segment);
-        free(nonconst_path);
         return find_directory(current_dir, tail);
     }
 
@@ -216,14 +214,10 @@ struct lfs_directory * find_directory(struct lfs_directory * current_dir, char *
     directories directory table  */
     for (int i = 0; i < current_dir->num_directories; i++) {
         if (strcmp(segment, current_dir->directories[i]->name) == 0) {
-            free(segment);
-            free(nonconst_path);
             return find_directory(current_dir->directories[i], tail);
         }
     }
 
-    free(segment);
-    free(nonconst_path);
     return NULL;  
 }
 
@@ -249,18 +243,17 @@ void * find_file_or_directory(char * path) {
     /* While true is bad, use it anyways */
     while (true) {
 
-        #ifdef DEBUG
-            if (tail == NULL) {
-                printf("find_file_or_dir:  name: %s, segment: %s, tail: NULL\n", name, segment);
-            } else {
-                printf("find_file_or_dir:  name: %s, segment: %s, tail: %s\n", name, segment, tail);
-            }
-        #endif
+        if (tail == NULL) {
+            printf("find_file_or_dir:  name: %s, segment: %s, tail: NULL\n>> ", name, segment);
+        } else {
+            printf("find_file_or_dir:  name: %s, segment: %s, tail: %s\n  >>", name, segment, tail);
+        }
 
         /* Attempt to find a child directory with the current segment as name */
         current_dir = find_directory(current_dir, segment);
 
         if (current_dir == NULL) {
+            printf(">> current_dir is NULL; last_dir name: %s\n", last_dir->name);
             struct lfs_file * file = find_file(last_dir, segment);
 
             /* If we found a file at the current path,
@@ -275,6 +268,7 @@ void * find_file_or_directory(char * path) {
 
             /* Nothing could be found at the given path */
             } else {
+                printf("NOOOOOOOOOOOOOOOOOOOOOOO\n");
                 return NULL;
             }
         }
@@ -284,6 +278,7 @@ void * find_file_or_directory(char * path) {
         segment = strtok(tail, "/");
         if (segment != NULL) {
 
+            printf(">> new segment is: %s\n", segment);
             if (strcmp(name, tail) == 0 && strcmp(segment, tail) != 0) {
                 tail = NULL;
             } else {
@@ -291,6 +286,7 @@ void * find_file_or_directory(char * path) {
             }
 
         } else {
+            printf(">> new segment is: NULL\n");
             break;
         }
     }

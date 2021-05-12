@@ -20,6 +20,7 @@ int lfs_mknod    ( const char *, mode_t, dev_t);
 int lfs_truncate ( const char *, off_t);
 int lfs_utime    (const char * , const struct timespec ts[2]);
 int lfs_unlink   (const char *);
+int lfs_destroy  (void *);
 
 // Defines operations for file operations to Fuse
 static struct fuse_operations lfs_oper = {
@@ -35,9 +36,14 @@ static struct fuse_operations lfs_oper = {
 	.release    = lfs_release,
 	.write      = lfs_write,
 	.utime      = lfs_utime,
+    .destroy    = lfs_destroy
 };
 
 
+/* Free the root directory on filesystem exit */
+int lfs_destroy(void * private_data) {
+    remove_directory(root_directory);
+}
 
 int lfs_unlink(const char * path) {
     char * nonconst_path = strdup(path);
@@ -48,8 +54,10 @@ int lfs_unlink(const char * path) {
     
     /* Extract the name of the file to be created from the absolute path */
     char * name = extract_last_segment(nonconst_path, '/');
+
     if (name == NULL) {
         fprintf(stderr, "unlink: Could not extract name from the given path '%s'\n", path);
+        free(nonconst_path);
         return -EINVAL;
     }
 
@@ -57,8 +65,12 @@ int lfs_unlink(const char * path) {
     char * parent_segments = extract_init_segments(nonconst_path, '/');
     char * parent_path = prepend_root(parent_segments);
 
+    free(nonconst_path);
+
     // Find the parent lfs_directory instance 
     struct lfs_directory * parent = find_directory(root_directory, parent_path);
+    free(parent_path);
+
     if (parent == NULL) {
         fprintf(stderr, "unlink: Could not find a parent folder for new entry at path '%s'\n", path);
         return -ENOENT;    
@@ -81,6 +93,7 @@ int lfs_utime(const char * path, const struct timespec ts[2]) {
     char * name = extract_last_segment(nonconst_path, '/');
     if (name == NULL) {
         fprintf(stderr, "utime: Could not extract name from the given path '%s'\n", path);
+        free(nonconst_path);
         return -EINVAL;
     }
 
@@ -93,8 +106,12 @@ int lfs_utime(const char * path, const struct timespec ts[2]) {
     char * parent_segments = extract_init_segments(nonconst_path, '/');
     char * parent_path = prepend_root(parent_segments);
 
+    free(nonconst_path);
+
     // Find the parent lfs_directory instance 
     struct lfs_directory * parent = find_directory(root_directory, parent_path);
+    free(parent_path);
+
     if (parent == NULL) {
         fprintf(stderr, "utime: Could not find a parent folder for new entry at path '%s'\n", path);
         return -ENOENT;    
@@ -119,6 +136,7 @@ int lfs_truncate(const char * path, off_t size) {
     char * name = extract_last_segment(nonconst_path, '/');
     if (name == NULL) {
         fprintf(stderr, "truncate: Could not extract name from the given path '%s'\n", path);
+        free(nonconst_path);
         return -EINVAL;
     }
 
@@ -126,8 +144,12 @@ int lfs_truncate(const char * path, off_t size) {
     char * parent_segments = extract_init_segments(nonconst_path, '/');
     char * parent_path = prepend_root(parent_segments);
 
+    free(nonconst_path);
+
     // Find the parent lfs_directory instance 
     struct lfs_directory * parent = find_directory(root_directory, parent_path);
+    free(parent_path);
+
     if (parent == NULL) {
         fprintf(stderr, "truncate: Could not find a parent folder for new entry at path '%s'\n", path);
         return -ENOENT;    
@@ -157,6 +179,7 @@ int lfs_mknod(const char * path, mode_t mode, dev_t rdev) {
     char * name = extract_last_segment(nonconst_path, '/');
     if (name == NULL) {
         fprintf(stderr, "mkdir: Could not extract name from the given path '%s'\n", path);
+        free(nonconst_path);
         return -1;
     }
 
@@ -164,8 +187,13 @@ int lfs_mknod(const char * path, mode_t mode, dev_t rdev) {
     char * parent_segments = extract_init_segments(nonconst_path, '/');
     char * parent_path = prepend_root(parent_segments);
 
+    free(parent_segments);
+    free(nonconst_path);
+
     // Find the parent lfs_directory instance 
     struct lfs_directory * parent = find_directory(root_directory, parent_path);
+    free(parent_path);
+
     if (parent == NULL) {
         fprintf(stderr, "mknod: Could not find a parent folder for new entry at path '%s'\n", path);
         return -ENOENT;
@@ -177,12 +205,15 @@ int lfs_mknod(const char * path, mode_t mode, dev_t rdev) {
 
 int lfs_rmdir(const char * path) {
 
-    char * nonconst_path = strdup(path);
+
+    // @FLAG : weird
     char * abs_path = (char *) malloc(6 + strlen(path));
     strcpy(abs_path, "root");
     strcat(abs_path, path);
 
     struct lfs_directory * dir = find_directory(root_directory, abs_path);
+    free(abs_path);
+
     if (dir == NULL) {
         fprintf(stderr, "rmdir: Could not find any directory to remove at path '%s'\n", path);
         return -ENOENT;
@@ -206,22 +237,16 @@ int lfs_write(const char * path, const char * buffer, size_t size, off_t offset,
         return -ENOENT;
     }
 
-/*
-    if (offset >= file->size + size) {
-        fprintf(stderr, "write: Could not write at offset '%ld' as it would be out of bounds\n", offset);
-        return 0;
-    }
-*/
-    #ifdef DEBUG
-        printf("write: Resizing file at path '%s' to be '%ld' bytes long\n", path, file->size + size + offset);
-    #endif
-    
     int new_size;
     if (offset + size > file->size) {
-        new_size = file->size + abs(offset+size - file->size);
+        new_size = file->size + offset+size - file->size;
     } else {
         new_size = file->size + size - offset;
     }
+
+    #ifdef DEBUG
+        printf("write: Resizing file at path '%s' to be '%d' bytes long\n", path, new_size);
+    #endif
 
     file->data = realloc(file->data, new_size);
     memcpy(file->data + offset, buffer, size);
@@ -244,6 +269,7 @@ int lfs_mkdir(const char * path, mode_t mode) {
     char * name = extract_last_segment(nonconst_path, '/');
     if (name == NULL) {
         fprintf(stderr, "mkdir: Could not extract name of folder from the given path '%s'\n", path);
+        free(nonconst_path);
         return -EINVAL;
     }
 
@@ -251,8 +277,12 @@ int lfs_mkdir(const char * path, mode_t mode) {
     char * parent_segments = extract_init_segments(nonconst_path, '/');
     char * parent_path = prepend_root(parent_segments);
 
+    free(nonconst_path);
+
     // Find the parent lfs_directory instance 
     struct lfs_directory * parent = find_directory(root_directory, parent_path);
+    free(parent_path);
+
     if (parent == NULL) {
         fprintf(stderr, "mkdir: Could not find a parent folder for the new directory at path '%s'\n", path);
         return -ENOENT;    
@@ -277,23 +307,25 @@ int lfs_getattr( const char *path, struct stat *stbuf ) {
         return res;
 	}
 
-    char * nonconst_path = strdup(path);
     char * abs_path = (char *) malloc(6 + strlen(path));
     strcpy(abs_path, "root");
     strcat(abs_path, path);
 
-    
 
-    /* Instead of using this function, we could've simply
-    extracted the parent path (the first n-1) segments of the given path,
-    and found the directory thereto, and hereafter looked in that directories
-    array of both files and directories, to find the structure we're looking for.
+    /* We're aware that instead of using the void pointer casting
+    that we've used here, we could just "copy paste" the code inside
 
-    However, we've opted to go for this approach, as wanted to utilize
-    void pointer casting, to learn a little more about possible usecases.
-    as this is for all intents and purposes, a learning experience. */
+        > lfs_controller.h - find_file_or_directory
+
+    And avoid having to cast the pointers and compare
+    fields from unknown structures.  However, we've opted
+    to go for this approach, as wanted to utilize
+    void pointer casting, to learn a little more about how it
+    works and how we can interact with unknown structures */
 
     void * found_struct = find_file_or_directory(abs_path);    
+    free(abs_path);
+
     if (found_struct == NULL) {
         fprintf(stderr, "getattr: Could not find an entry (file or directory) at path '%s'\n", path);
         return -ENOENT;
@@ -333,13 +365,13 @@ int lfs_readdir( const char *path, void *buf, fuse_fill_dir_t filler, off_t offs
 	filler(buf, ".", NULL, 0);
 	filler(buf, "..", NULL, 0);
 
-    char * nonconst_path = strdup(path);
     char * abs_path = (char *) malloc(6 + strlen(path));
     strcpy(abs_path, "root");
     strcat(abs_path, path);
 
-
     struct lfs_directory * dir = find_directory(root_directory, abs_path);
+    free(abs_path);
+
     if (dir == NULL) {
         fprintf(stderr, "readdir: Could not find a directory at path '%s' to read\n", path);
         return -ENOENT;
@@ -364,6 +396,9 @@ int lfs_open( const char *path, struct fuse_file_info *fi ) {
     char * nonconst_path = strdup(path);
     char * abs_path = prepend_root(nonconst_path);
     void * found_struct = find_file_or_directory(abs_path);    
+
+    free(nonconst_path);
+    free(abs_path);
 
     /* The file we're trying to open does not exist. */
     if (found_struct == NULL || ((struct lfs_file *)found_struct)->mode != 33279) {
@@ -422,6 +457,7 @@ int main( int argc, char *argv[] ) {
 
 
 	fuse_main( argc, argv, &lfs_oper);
+
 
 
 	return 0;
