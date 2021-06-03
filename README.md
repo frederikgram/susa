@@ -1,7 +1,7 @@
 # susa
 
 ## About
-An inobscure implementation of a Hashtable-based filesystem (Constant\* look-up) using the FUSE (Filesystem in Userspace) interface.
+An inobscure implementation of a Hashtable-based filesystem (Constant-Time\* file/directory look-up) using the FUSE (Filesystem in Userspace) interface.
 
 \* This is as a best-case, since collisions are handled using a linear-search, and thus slows down performance.  This can be managed by dynamically resizing the Hashtable as determined by a given policy.
 
