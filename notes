@@ -1,0 +1,6 @@
+# TOOD & Notes, Could be a Github Project but plaintext files are simpler.
+
+
+## Optimizations
+1) Use `fuse_get_context()->pid` to track the current working directory, effectively
+removing the need for hash-table indexing in some cases.
