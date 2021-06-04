@@ -32,8 +32,4 @@ $ cd src
 $ ./susa ./tmp/susa-filesystem
 $ cd /tmp/susa-filesystem
 ```
-From here you can either use the terminal as usual, or you could
-open a graphical fileexplorer such as [nautilus](https://manpages.ubuntu.com/manpages/bionic/man1/nautilus.1.html)
-
-`$ nautilus .`
-
+From here you can either use the terminal as usual, or a graphical file-explorer such as [nautilus](https://manpages.ubuntu.com/manpages/bionic/man1/nautilus.1.html)
